@@ -1,0 +1,176 @@
+<head>
+    <title>SchoolSnake</title>
+</head>
+
+<style>
+html, body {
+    color: #fff;
+    height: 100%;
+    margin: 0;
+}
+body {
+    background: #222;
+    font-family: Arial;
+}
+.topScore {
+    width: 33%;
+}
+.jump {
+    animation: jump 0.3s infinite 
+}
+@keyframes jump {
+    50% { transform: skewX(10deg) translate(0px,-10px); }
+    0%,100% { transform: skewX(-10deg) translate(0px,0px); }
+}
+</style>
+
+<body>
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);">
+        <div style="text-align: center;" id="speedLabel">Speed: 25</div>
+        <input type="range" style="width: 75%; display: flex; margin: auto;" id="slider" max="100" min="1" value="25">
+        <br>
+        <div style="display: flex; font-size: 20px;">
+            <div class="topScore" id="score">🍎 0</div>
+            <div class="topScore" id="timer" style="text-align: center;">⏰ 0:00</div>
+            <div class="topScore" id="highScore" style="text-align: end;">🏆 0</div>
+        </div>
+        <canvas width="400" height="400" id="cvs"><canvas>
+    </div>
+</body>
+
+<script>
+    function randInt(min, max) { return Math.floor(Math.random() * (max - min)) + min }
+    const LS = localStorage
+    const slider = document.getElementById('slider')
+    const cvs = document.getElementById('cvs')
+    const ctx = cvs.getContext('2d')
+    const cellPx = 16
+    const max = cvs.width/cellPx
+    const colorMult = 360/max
+    const timerElement = document.getElementById("timer")
+    const scoreElement = document.getElementById("score")
+    const hScoreElemnt = document.getElementById("highScore")
+    const speedElement = document.getElementById("speedLabel")
+    var start = performance.now()
+    var snake = {
+        x: 160,
+        y: 160,
+        dx: cellPx,
+        dy: 0,
+        occupied: [],
+        size: 5,
+        delayTurn: false
+    }
+    var food = {
+        x: 320,
+        y: 320
+    }
+    if(!LS.highScore) {LS.highScore=snake.size}
+    if(!LS.speed) {LS.speed = 25}
+    scoreElement.innerText = `🍎 ${snake.size}`
+    hScoreElemnt.innerText = `🏆 ${LS.highScore}`
+    slider.value = LS.speed
+    refreshCounters()
+
+    var frameIdx = 0
+    function tick() {
+        requestAnimationFrame(tick)
+        if(frameIdx++<(100/slider.value)) return;
+        frameIdx=0
+
+        ctx.fillStyle = '#333'
+        ctx.fillRect(0,0,cvs.width,cvs.height)
+        snake.x += snake.dx
+        snake.y += snake.dy
+
+        if(snake.x < 0) { snake.x = cvs.width - cellPx } // horizontal wrap
+        else if(snake.x >= cvs.width) { snake.x = 0 }
+        if(snake.y < 0) { snake.y = cvs.height - cellPx } // vertical wrap
+        else if(snake.y >= cvs.height) { snake.y = 0 }
+    
+        snake.occupied.unshift({x: snake.x, y: snake.y})
+        if(snake.occupied.length > snake.size) { snake.occupied.pop() }
+
+        ctx.fillStyle = `hsl(${(snake.size*colorMult)%360},100%,50%)`
+        ctx.fillRect(food.x+1, food.y+1, cellPx-2, cellPx-2)
+    
+        snake.occupied.map((cell, idx) => {
+            ctx.fillStyle = `hsl(${(idx*colorMult)%360},100%,50%)`
+            ctx.fillRect(cell.x+1, cell.y+1, cellPx-2, cellPx-2)  
+        
+            if(cell.x == food.x && cell.y == food.y) {
+                snake.size++
+                refreshCounters()
+                food.x = randInt(0, max) * cellPx
+                food.y = randInt(0, max) * cellPx
+            }
+        
+            for(let i=idx+1;i<snake.occupied.length;i++){
+                if(cell.x == snake.occupied[i].x && cell.y == snake.occupied[i].y) {
+                    snake.x = 160
+                    snake.y = 160
+                    snake.occupied = []
+                    snake.size = 5
+                    snake.dx = cellPx
+                    snake.dy = 0
+                    refreshCounters(true)
+            
+                    food.x = randInt(0, max) * cellPx
+                    food.y = randInt(0, max) * cellPx
+                }
+            }
+        })
+        snake.delayTurn = false
+    }
+    tick()
+    
+    function scores(){
+        requestAnimationFrame(scores)
+        const ms = performance.now()-start
+        var sec = ~~(ms/1000)%60
+        timerElement.innerText = `⏰ ${ms>3600000?`${~~(ms/3600000)}:`:''}${~~(ms/60000)%60}:${(sec+'').length==1?'0':''}${sec}.${(~~(ms%1000)+'').padStart(3,'0')}`
+    };scores()
+
+    function refreshCounters(resetTimer){
+        scoreElement.innerText = `🍎 ${snake.size}`
+        if(snake.size>LS.highScore) {
+            hScoreElemnt.classList.add('jump')
+            LS.highScore = snake.size
+        }
+        hScoreElemnt.innerText = `🏆 ${LS.highScore}`
+        if(resetTimer) {
+            start = performance.now()
+            hScoreElemnt.classList.remove('jump')
+        }
+        speedElement.innerText = `Speed: ${slider.value}`
+    }
+
+    slider.addEventListener('input', function() {
+        LS.speed = slider.value
+        refreshCounters(false)
+    })
+
+    document.addEventListener('keydown', function(e) {
+        if(snake.delayTurn) return
+        if ([37,65].includes(e.which) && snake.dx == 0) { // left
+            snake.dx = -cellPx;
+            snake.dy = 0;
+            snake.delayTurn = true
+        }
+        else if ([40,83].includes(e.which) && snake.dy == 0) { // down
+            snake.dx = 0;
+            snake.dy = cellPx;
+            snake.delayTurn = true
+        }
+        else if ([38,87].includes(e.which) && snake.dy == 0) { // up
+            snake.dx = 0;
+            snake.dy = -cellPx;
+            snake.delayTurn = true
+        }
+        else if ([39,68].includes(e.which) && snake.dx == 0) { // right
+            snake.dx = cellPx;
+            snake.dy = 0;
+            snake.delayTurn = true
+        }
+    })
+</script>
